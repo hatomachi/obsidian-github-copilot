@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, WorkspaceLeaf, MarkdownRenderer } from "obsidian";
 import { CopilotService } from "./CopilotService";
 import MyPlugin from "./main";
 
@@ -93,15 +93,17 @@ export class CopilotChatView extends ItemView {
         const msgEl = this.chatHistoryEl.createEl("div", { cls: `copilot-msg copilot-msg-${sender.toLowerCase()}` });
         msgEl.style.marginBottom = "10px";
 
-        const senderEl = msgEl.createEl("span", { text: `${sender}: ` });
+        const senderEl = msgEl.createEl("div", { text: `${sender}` }); // Changed to div for block layout
         senderEl.style.fontWeight = "bold";
+        senderEl.style.marginBottom = "4px";
 
         if (sender === "System") {
             senderEl.style.color = "var(--text-muted)";
         }
 
-        const textEl = msgEl.createEl("span", { text: text });
+        const textEl = msgEl.createEl("div"); // Use div for valid Markdown block elements integration
         textEl.style.whiteSpace = "pre-wrap";
+        textEl.setText(text);
 
         if (sender === "System") {
             textEl.style.color = "var(--text-muted)";
@@ -121,40 +123,47 @@ export class CopilotChatView extends ItemView {
 
         this.appendMessage("User", prompt);
 
-        const responseTextEl = this.appendMessage("Copilot", "", "streaming");
+        const responseTextEl = this.appendMessage("Copilot", "Thinking...", "streaming");
         let fullResponse = "";
+        let isFirstChunk = true;
 
         this.copilotService.askCopilot(
             this.currentSessionId,
             prompt,
             (chunk) => {
                 // stdout stream
+                if (isFirstChunk) {
+                    responseTextEl.setText("");
+                    isFirstChunk = false;
+                }
                 fullResponse += chunk;
                 responseTextEl.setText(fullResponse);
                 this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
             },
             (errChunk) => {
                 // stderr stream
-                // We do not print stderr to the UI by default as it contains verbose telemetry
-                // "Total usage est: 1 Premium request", etc.
-                // Developers can read it from the console via CopilotService logging.
-
-                // However, if we fail to start completely (e.g. ENOENT), we want to show it.
-                // We can infer a catastrophic error if there is a literal "ENOENT" or similar token, 
-                // but for now, we rely on the non-zero exit code to alert the user of failure.
             },
             (code) => {
                 this.submitBtnEl.disabled = false;
 
+                if (isFirstChunk) {
+                    responseTextEl.setText(""); // remove thinking
+                }
+
                 if (code !== 0 && code !== null) {
-                    // Only output a system message if the process actually failed.
                     this.appendMessage("System", `Process encountered an error (exited with code ${code}). Check developer console for more details.`);
                 }
 
-                // Optional: If the prompt response is completely empty, provide a fallback.
                 if (fullResponse.trim() === "" && code === 0) {
                     responseTextEl.setText("(No text response. The command might have executed silently.)");
+                } else if (!isFirstChunk && fullResponse.trim() !== "") {
+                    // Finished successfully: Render the accumulated text as Markdown
+                    responseTextEl.empty(); // clear plain text
+                    responseTextEl.style.whiteSpace = "normal"; // allow normal HTML wrapping for rendered markdown
+                    MarkdownRenderer.render(this.plugin.app, fullResponse, responseTextEl, "", this);
                 }
+
+                this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
             }
         );
     }
