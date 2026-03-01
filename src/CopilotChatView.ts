@@ -12,10 +12,14 @@ export class CopilotChatView extends ItemView {
     private contextCheckboxEl: HTMLInputElement;
     private contextFileLabelEl: HTMLSpanElement;
     private activeFile: TFile | null = null;
-    private eventRef: EventRef | null = null;
+    private leafEventRef: EventRef | null = null;
+    private vaultModifyRef: EventRef | null = null;
+    private vaultCreateRef: EventRef | null = null;
 
     private copilotService: CopilotService | null = null;
     private currentSessionId: string;
+    private isProcessing: boolean = false;
+    private modifiedFiles: Set<string> = new Set();
 
     constructor(leaf: WorkspaceLeaf, private plugin: MyPlugin) {
         super(leaf);
@@ -104,7 +108,17 @@ export class CopilotChatView extends ItemView {
 
         // Register active leaf change listener
         this.updateActiveFile();
-        this.eventRef = this.plugin.app.workspace.on('active-leaf-change', () => this.updateActiveFile());
+        this.leafEventRef = this.plugin.app.workspace.on('active-leaf-change', () => this.updateActiveFile());
+
+        // Register vault listeners for Copilot file modifications
+        this.vaultModifyRef = this.plugin.app.vault.on('modify', (file: TFile) => this.onVaultChange(file));
+        this.vaultCreateRef = this.plugin.app.vault.on('create', (file: TFile) => this.onVaultChange(file));
+    }
+
+    private onVaultChange(file: TFile) {
+        if (this.isProcessing) {
+            this.modifiedFiles.add(file.path);
+        }
     }
 
     private updateActiveFile() {
@@ -179,6 +193,9 @@ export class CopilotChatView extends ItemView {
         let fullResponse = "";
         let isFirstChunk = true;
 
+        this.isProcessing = true;
+        this.modifiedFiles.clear();
+
         this.copilotService.askCopilot(
             this.currentSessionId,
             finalPrompt,
@@ -215,15 +232,33 @@ export class CopilotChatView extends ItemView {
                     MarkdownRenderer.render(this.plugin.app, fullResponse, responseTextEl, "", this);
                 }
 
+                // Give file I/O a tiny bit of breathing room to trigger Obsidian events before checking
+                setTimeout(() => {
+                    this.isProcessing = false;
+                    if (this.modifiedFiles.size > 0) {
+                        const fileList = Array.from(this.modifiedFiles).join(", ");
+                        this.appendMessage("System", `📝 Copilot modified: ${fileList}`);
+                        this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
+                    }
+                }, 500);
+
                 this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
             }
         );
     }
 
     async onClose() {
-        if (this.eventRef) {
-            this.plugin.app.workspace.offref(this.eventRef);
-            this.eventRef = null;
+        if (this.leafEventRef) {
+            this.plugin.app.workspace.offref(this.leafEventRef);
+            this.leafEventRef = null;
+        }
+        if (this.vaultModifyRef) {
+            this.plugin.app.vault.offref(this.vaultModifyRef);
+            this.vaultModifyRef = null;
+        }
+        if (this.vaultCreateRef) {
+            this.plugin.app.vault.offref(this.vaultCreateRef);
+            this.vaultCreateRef = null;
         }
     }
 }
