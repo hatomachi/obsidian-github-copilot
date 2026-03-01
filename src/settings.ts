@@ -1,15 +1,17 @@
-import {App, PluginSettingTab, Setting} from "obsidian";
+import { App, PluginSettingTab, Setting } from "obsidian";
 import MyPlugin from "./main";
 
 export interface MyPluginSettings {
-	mySetting: string;
+	copilotCommandPath: string;
+	nodeCommandPath: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: 'default'
+	copilotCommandPath: 'copilot',
+	nodeCommandPath: 'node'
 }
 
-export class SampleSettingTab extends PluginSettingTab {
+export class CopilotSettingTab extends PluginSettingTab {
 	plugin: MyPlugin;
 
 	constructor(app: App, plugin: MyPlugin) {
@@ -18,18 +20,29 @@ export class SampleSettingTab extends PluginSettingTab {
 	}
 
 	display(): void {
-		const {containerEl} = this;
+		const { containerEl } = this;
 
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Settings #1')
-			.setDesc('It\'s a secret')
+			.setName('Copilot CLI Path')
+			.setDesc('Absolute path to the GitHub Copilot CLI executable (e.g., /usr/local/bin/copilot).')
 			.addText(text => text
-				.setPlaceholder('Enter your secret')
-				.setValue(this.plugin.settings.mySetting)
+				.setPlaceholder('copilot')
+				.setValue(this.plugin.settings.copilotCommandPath)
 				.onChange(async (value) => {
-					this.plugin.settings.mySetting = value;
+					this.plugin.settings.copilotCommandPath = value || 'copilot';
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('Node.js Path')
+			.setDesc('Absolute path to the Node.js executable (e.g., /usr/local/bin/node or /opt/homebrew/bin/node).')
+			.addText(text => text
+				.setPlaceholder('node')
+				.setValue(this.plugin.settings.nodeCommandPath)
+				.onChange(async (value) => {
+					this.plugin.settings.nodeCommandPath = value || 'node';
 					await this.plugin.saveSettings();
 				}));
 	}

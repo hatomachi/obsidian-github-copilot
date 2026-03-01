@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "obsidian-github-copilot",
+	"name": "GitHub Copilot Chat",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
+	"description": "An Obsidian plugin that seamlessly integrates the GitHub Copilot CLI into a robust chat interface, allowing AI to read and write your vault files.",
+	"author": "Sota Ikari",
+	"authorUrl": "https://github.com/github/copilot-sdk",
 	"fundingUrl": "https://obsidian.md/pricing",
-	"isDesktopOnly": false
+	"isDesktopOnly": true
 }
