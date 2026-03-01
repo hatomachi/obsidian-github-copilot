@@ -1,14 +1,23 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import MyPlugin from "./main";
 
+export interface ChatMessage {
+	role: 'User' | 'Copilot' | 'System';
+	content: string;
+}
+
 export interface MyPluginSettings {
 	copilotCommandPath: string;
 	nodeCommandPath: string;
+	activeSessionId: string;
+	chatHistory: ChatMessage[];
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	copilotCommandPath: 'copilot',
-	nodeCommandPath: 'node'
+	nodeCommandPath: 'node',
+	activeSessionId: '',
+	chatHistory: []
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

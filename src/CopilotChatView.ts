@@ -23,8 +23,7 @@ export class CopilotChatView extends ItemView {
 
     constructor(leaf: WorkspaceLeaf, private plugin: MyPlugin) {
         super(leaf);
-        // Initialize with a fresh session ID
-        this.currentSessionId = crypto.randomUUID();
+        this.currentSessionId = "";
     }
 
     getViewType() {
@@ -113,6 +112,27 @@ export class CopilotChatView extends ItemView {
         // Register vault listeners for Copilot file modifications
         this.vaultModifyRef = this.plugin.app.vault.on('modify', (file: TFile) => this.onVaultChange(file));
         this.vaultCreateRef = this.plugin.app.vault.on('create', (file: TFile) => this.onVaultChange(file));
+
+        // Restore Session ID and Chat History
+        if (!this.plugin.settings.activeSessionId) {
+            this.plugin.settings.activeSessionId = crypto.randomUUID();
+            this.plugin.saveSettings();
+        }
+        this.currentSessionId = this.plugin.settings.activeSessionId;
+
+        this.restoreChatHistory();
+    }
+
+    private restoreChatHistory() {
+        const history = this.plugin.settings.chatHistory || [];
+        for (const msg of history) {
+            const responseTextEl = this.appendMessage(msg.role, msg.content, "normal", false);
+            if (msg.role === "Copilot") {
+                responseTextEl.empty();
+                responseTextEl.style.whiteSpace = "normal";
+                MarkdownRenderer.render(this.plugin.app, msg.content, responseTextEl, "", this);
+            }
+        }
     }
 
     private onVaultChange(file: TFile) {
@@ -135,13 +155,17 @@ export class CopilotChatView extends ItemView {
         }
     }
 
-    private startNewChat() {
+    private async startNewChat() {
         this.currentSessionId = crypto.randomUUID();
+        this.plugin.settings.activeSessionId = this.currentSessionId;
+        this.plugin.settings.chatHistory = [];
+        await this.plugin.saveSettings();
+
         this.chatHistoryEl.empty();
-        this.appendMessage("System", "Started a new conversation session.");
+        this.appendMessage("System", "Started a new conversation session.", "normal", true);
     }
 
-    private appendMessage(sender: "User" | "Copilot" | "System", text: string, type: "normal" | "streaming" = "normal") {
+    private appendMessage(sender: "User" | "Copilot" | "System", text: string, type: "normal" | "streaming" = "normal", save: boolean = false) {
         const msgEl = this.chatHistoryEl.createEl("div", { cls: `copilot-msg copilot-msg-${sender.toLowerCase()}` });
         msgEl.style.marginBottom = "10px";
 
@@ -163,6 +187,12 @@ export class CopilotChatView extends ItemView {
         }
 
         this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
+
+        if (save) {
+            this.plugin.settings.chatHistory.push({ role: sender, content: text });
+            this.plugin.saveSettings(); // Fire and forget save
+        }
+
         return textEl;
     }
 
@@ -173,8 +203,8 @@ export class CopilotChatView extends ItemView {
         this.inputEl.value = "";
         this.submitBtnEl.disabled = true;
 
-        // Display only user's actual prompt in UI
-        this.appendMessage("User", prompt);
+        // Display only user's actual prompt in UI, save it to history
+        this.appendMessage("User", prompt, "normal", true);
 
         // Build CLI command prompt
         let finalPrompt = prompt;
@@ -230,6 +260,10 @@ export class CopilotChatView extends ItemView {
                     responseTextEl.empty(); // clear plain text
                     responseTextEl.style.whiteSpace = "normal"; // allow normal HTML wrapping for rendered markdown
                     MarkdownRenderer.render(this.plugin.app, fullResponse, responseTextEl, "", this);
+
+                    // Manually push Copilot's final response to history and save
+                    this.plugin.settings.chatHistory.push({ role: 'Copilot', content: fullResponse });
+                    this.plugin.saveSettings();
                 }
 
                 // Give file I/O a tiny bit of breathing room to trigger Obsidian events before checking
@@ -237,7 +271,7 @@ export class CopilotChatView extends ItemView {
                     this.isProcessing = false;
                     if (this.modifiedFiles.size > 0) {
                         const fileList = Array.from(this.modifiedFiles).join(", ");
-                        this.appendMessage("System", `📝 Copilot modified: ${fileList}`);
+                        this.appendMessage("System", `📝 Copilot modified: ${fileList}`, "normal", true);
                         this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
                     }
                 }, 500);
