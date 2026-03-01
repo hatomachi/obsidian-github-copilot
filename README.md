@@ -4,8 +4,10 @@ This plugin provides a seamless right-pane chat interface for interacting with t
 
 ## Features
 - **Chat Interface**: Open the Copilot Chat view from the ribbon icon to start asking questions.
-- **Contextual Sessions**: The plugin remembers conversation context using active session UUIDs.
-- **File Manipulation**: Authorizes Copilot's CLI `--allow-all` flag out of the box, letting it directly create or rewrite `.md` files in your vault. Obsdian instantly syncs these file updates natively.
+- **Contextual Sessions & History Persistence**: The plugin remembers conversation context using active session UUIDs and saves your chat history across Obsidian restarts.
+- **Active File Context**: Automatically detects the active markdown file you are viewing and lets you easily include it in the Prompt context.
+- **Markdown Rendering**: Beautifully renders Copilot’s responses into rich Obsidian Markdown after streaming completes.
+- **File Manipulation & Change Detection**: Authorizes Copilot's CLI `--allow-all` flag out of the box, letting it directly create or rewrite `.md` files in your vault. Obsidian instantly syncs these file updates natively and displays system notifications in the chat when files are altered.
 - **Configurable Environments**: Supports overriding the exact path to `copilot` and `node` so the plugin works reliably across different developer environments where `$PATH` may not apply to GUI apps.
 
 ## Prerequisites
