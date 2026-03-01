@@ -11,13 +11,15 @@ export interface MyPluginSettings {
 	nodeCommandPath: string;
 	activeSessionId: string;
 	chatHistory: ChatMessage[];
+	copilotModel: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
 	copilotCommandPath: 'copilot',
 	nodeCommandPath: 'node',
 	activeSessionId: '',
-	chatHistory: []
+	chatHistory: [],
+	copilotModel: 'claude-sonnet-4.6'
 }
 
 export class CopilotSettingTab extends PluginSettingTab {

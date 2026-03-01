@@ -11,6 +11,7 @@ export class CopilotChatView extends ItemView {
     private contextBarEl: HTMLElement;
     private contextCheckboxEl: HTMLInputElement;
     private contextFileLabelEl: HTMLSpanElement;
+    private modelSelectEl: HTMLSelectElement;
     private activeFile: TFile | null = null;
     private leafEventRef: EventRef | null = null;
     private vaultModifyRef: EventRef | null = null;
@@ -65,7 +66,7 @@ export class CopilotChatView extends ItemView {
         const newChatBtnEl = controlsRow.createEl("button", { text: "New Chat" });
         newChatBtnEl.onclick = () => this.startNewChat();
 
-        // Context Bar (Active File)
+        // Context Bar (Active File & Model Selection)
         this.contextBarEl = bottomContainer.createEl("div", { cls: "copilot-context-bar" });
         this.contextBarEl.style.display = "flex";
         this.contextBarEl.style.alignItems = "center";
@@ -73,11 +74,34 @@ export class CopilotChatView extends ItemView {
         this.contextBarEl.style.fontSize = "0.85em";
         this.contextBarEl.style.color = "var(--text-muted)";
 
-        this.contextCheckboxEl = this.contextBarEl.createEl("input", { type: "checkbox" });
+        const fileContextWrapper = this.contextBarEl.createEl("div");
+        fileContextWrapper.style.display = "flex";
+        fileContextWrapper.style.alignItems = "center";
+        fileContextWrapper.style.gap = "4px";
+
+        this.contextCheckboxEl = fileContextWrapper.createEl("input", { type: "checkbox" });
         this.contextCheckboxEl.checked = true;
         this.contextCheckboxEl.title = "Include the active file as context in your message";
 
-        this.contextFileLabelEl = this.contextBarEl.createEl("span", { text: "No active file" });
+        this.contextFileLabelEl = fileContextWrapper.createEl("span", { text: "No active file" });
+
+        // Spacer to push select to the right
+        const spacer = this.contextBarEl.createEl("div");
+        spacer.style.flex = "1";
+
+        this.modelSelectEl = this.contextBarEl.createEl("select");
+        this.modelSelectEl.style.fontSize = "0.9em";
+        this.modelSelectEl.style.maxWidth = "150px";
+
+        // Initial Loading State
+        const loadingOption = this.modelSelectEl.createEl("option", { value: "", text: "Loading models..." });
+
+        this.modelSelectEl.addEventListener("change", async () => {
+            if (this.modelSelectEl.value) {
+                this.plugin.settings.copilotModel = this.modelSelectEl.value;
+                await this.plugin.saveSettings();
+            }
+        });
 
         // Input row
         const inputRow = bottomContainer.createEl("div");
@@ -121,6 +145,33 @@ export class CopilotChatView extends ItemView {
         this.currentSessionId = this.plugin.settings.activeSessionId;
 
         this.restoreChatHistory();
+
+        // Fetch Dynamic Models
+        if (this.copilotService) {
+            this.copilotService.getAvailableModels().then((models: string[]) => {
+                this.modelSelectEl.empty();
+
+                if (models.length === 0) {
+                    // Fallback to static list if parsing failed
+                    models = ["claude-sonnet-4.6", "gpt-5.2", "claude-opus-4.6", "gemini-3-pro-preview"];
+                }
+
+                for (const modelId of models) {
+                    const option = this.modelSelectEl.createEl("option", { value: modelId, text: modelId });
+                    if (this.plugin.settings.copilotModel === modelId) {
+                        option.selected = true;
+                    }
+                }
+
+                // If the previously saved model isn't in the list, set it to the first available
+                if (!models.includes(this.plugin.settings.copilotModel) && models.length > 0) {
+                    const fallbackModel = models[0] || "claude-sonnet-4.6";
+                    this.modelSelectEl.value = fallbackModel;
+                    this.plugin.settings.copilotModel = fallbackModel;
+                    this.plugin.saveSettings();
+                }
+            });
+        }
     }
 
     private restoreChatHistory() {
@@ -229,7 +280,8 @@ export class CopilotChatView extends ItemView {
         this.copilotService.askCopilot(
             this.currentSessionId,
             finalPrompt,
-            (chunk) => {
+            this.plugin.settings.copilotModel,
+            (chunk: string) => {
                 // stdout stream
                 if (isFirstChunk) {
                     responseTextEl.setText("");
@@ -239,10 +291,10 @@ export class CopilotChatView extends ItemView {
                 responseTextEl.setText(fullResponse);
                 this.chatHistoryEl.scrollTop = this.chatHistoryEl.scrollHeight;
             },
-            (errChunk) => {
+            (errChunk: string) => {
                 // stderr stream
             },
-            (code) => {
+            (code: number | null) => {
                 this.submitBtnEl.disabled = false;
 
                 if (isFirstChunk) {
