@@ -58,7 +58,7 @@ export class CopilotService {
 
         args.push('-p', prompt);
 
-        console.log(`[CopilotService] Spawning: ${this.cliCommand} ${args.join(" ")} in ${this.vaultPath} `);
+        console.log(`[CopilotService] Spawning: ${commandToSpawn} ${args.join(" ")} in ${this.vaultPath}`);
 
         // Create an augmented environment that injects the Node.js directory into the PATH.
         // This is crucial for macOS GUI apps (like Obsidian) that don't inherit terminal PATHs (like Homebrew).
@@ -72,7 +72,7 @@ export class CopilotService {
         const child = spawn(commandToSpawn, args, {
             cwd: this.vaultPath,
             env: augmentedEnv,
-            shell: process.platform === 'win32'
+            shell: process.platform === 'win32' && !isWindowsPs1 // Disable cmd shell when explicitly running powershell
         });
 
         child.stdout.on("data", (data) => {
