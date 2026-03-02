@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-github-copilot",
 	"name": "GitHub Copilot Chat",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.15.0",
 	"description": "An Obsidian plugin that seamlessly integrates the GitHub Copilot CLI into a robust chat interface, allowing AI to read and write your vault files.",
 	"author": "Sota Ikari",
