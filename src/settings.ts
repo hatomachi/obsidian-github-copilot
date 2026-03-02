@@ -48,7 +48,7 @@ export class CopilotSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Node.js Path')
-			.setDesc('Absolute path to the Node.js executable (e.g., /usr/local/bin/node or /opt/homebrew/bin/node).')
+			.setDesc('Absolute path to the Node.js executable (e.g., /usr/local/bin/node or /opt/homebrew/bin/node). Used to inject into the PATH on macOS.')
 			.addText(text => text
 				.setPlaceholder('node')
 				.setValue(this.plugin.settings.nodeCommandPath)
