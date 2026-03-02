@@ -43,14 +43,10 @@ export class CopilotService {
             '--resume', sessionId
         ];
 
-        let commandToSpawn = this.cliCommand;
-        // Node's spawn with `shell: true` uses cmd.exe on Windows. cmd.exe cannot natively execute .ps1 files.
-        const isWindowsPs1 = process.platform === 'win32' && this.cliCommand.toLowerCase().endsWith('.ps1');
-
-        if (isWindowsPs1) {
-            commandToSpawn = 'powershell.exe';
-            args.unshift('-ExecutionPolicy', 'Bypass', '-File', this.cliCommand);
-        }
+        // Directly invoke Node, passing the JS script path as the first argument.
+        // This bypasses .cmd, .ps1, and bash wrappers completely, resolving Windows shell association issues.
+        const commandToSpawn = this.nodePath || "node";
+        args.unshift(this.cliCommand);
 
         if (model) {
             args.push('--model', model);
@@ -72,7 +68,7 @@ export class CopilotService {
         const child = spawn(commandToSpawn, args, {
             cwd: this.vaultPath,
             env: augmentedEnv,
-            shell: process.platform === 'win32' && !isWindowsPs1 // Disable cmd shell when explicitly running powershell
+            shell: false // No shell needed since we execute the Node binary directly
         });
 
         child.stdout.on("data", (data) => {
@@ -113,14 +109,12 @@ export class CopilotService {
                 augmentedEnv.PATH = `${nodeDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
             }
 
-            const isWindowsPs1 = process.platform === 'win32' && this.cliCommand.toLowerCase().endsWith('.ps1');
-            const baseCommand = isWindowsPs1 ? `powershell.exe -ExecutionPolicy Bypass -File "${this.cliCommand}"` : `"${this.cliCommand}"`;
-            const command = `${baseCommand} ask --help`;
+            // Execute `node /path/to/copilot.js ask --help`
+            const command = `"${this.nodePath || 'node'}" "${this.cliCommand}" ask --help`;
 
             exec(
                 command,
                 {
-                    shell: process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : undefined,
                     env: augmentedEnv // Provide full environment context for CLI execution
                 },
                 (error: any, stdout: string, stderr: string) => {

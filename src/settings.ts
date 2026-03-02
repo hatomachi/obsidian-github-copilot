@@ -36,8 +36,8 @@ export class CopilotSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Copilot CLI Path')
-			.setDesc('Absolute path to the GitHub Copilot CLI executable (e.g., /usr/local/bin/copilot).')
+			.setName('Copilot JS Script Path')
+			.setDesc('Absolute path to the GitHub Copilot CLI JavaScript file (e.g., /usr/local/bin/copilot or C:\\Users\\...\\npm\\node_modules\\@githubnext\\github-copilot-cli\\bin\\copilot.js). Do NOT point to .cmd or .ps1 wrappers.')
 			.addText(text => text
 				.setPlaceholder('copilot')
 				.setValue(this.plugin.settings.copilotCommandPath)
