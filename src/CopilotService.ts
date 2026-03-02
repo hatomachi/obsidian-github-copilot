@@ -43,6 +43,15 @@ export class CopilotService {
             '--resume', sessionId
         ];
 
+        let commandToSpawn = this.cliCommand;
+        // Node's spawn with `shell: true` uses cmd.exe on Windows. cmd.exe cannot natively execute .ps1 files.
+        const isWindowsPs1 = process.platform === 'win32' && this.cliCommand.toLowerCase().endsWith('.ps1');
+
+        if (isWindowsPs1) {
+            commandToSpawn = 'powershell.exe';
+            args.unshift('-ExecutionPolicy', 'Bypass', '-File', this.cliCommand);
+        }
+
         if (model) {
             args.push('--model', model);
         }
@@ -60,7 +69,7 @@ export class CopilotService {
             augmentedEnv.PATH = `${nodeDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
         }
 
-        const child = spawn(this.cliCommand, args, {
+        const child = spawn(commandToSpawn, args, {
             cwd: this.vaultPath,
             env: augmentedEnv,
             shell: process.platform === 'win32'
@@ -104,7 +113,10 @@ export class CopilotService {
                 augmentedEnv.PATH = `${nodeDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
             }
 
-            const command = `"${this.cliCommand}" ask --help`;
+            const isWindowsPs1 = process.platform === 'win32' && this.cliCommand.toLowerCase().endsWith('.ps1');
+            const baseCommand = isWindowsPs1 ? `powershell.exe -ExecutionPolicy Bypass -File "${this.cliCommand}"` : `"${this.cliCommand}"`;
+            const command = `${baseCommand} ask --help`;
+
             exec(
                 command,
                 {
