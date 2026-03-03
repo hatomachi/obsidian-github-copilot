@@ -1,23 +1,24 @@
 import asyncio
 import sys
 import json
+import base64
 from copilot import CopilotClient, PermissionHandler
 
 async def main():
-    # Read prompt from stdin
-    input_data = sys.stdin.read()
-    if not input_data:
-        print("Error: No input provided on stdin", file=sys.stderr)
+    if len(sys.argv) < 2:
+        print("Error: No input provided as argument", file=sys.stderr)
         sys.exit(1)
 
     try:
-        data = json.loads(input_data)
+        # Read the base64 encoded JSON string from the first argument
+        base64_input = sys.argv[1]
+        json_input = base64.b64decode(base64_input).decode('utf-8')
+        data = json.loads(json_input)
+        
         prompt = data.get("prompt")
         model = data.get("model", "gpt-4o")
-        # In a real app we might use session_id to maintain context, 
-        # but the copilot-sdk currently handles single-shot send_and_wait nicely.
-    except json.JSONDecodeError:
-        print("Error: Invalid JSON input", file=sys.stderr)
+    except Exception as e:
+        print(f"Error parsing input: {e}", file=sys.stderr)
         sys.exit(1)
 
     if not prompt:
@@ -30,19 +31,18 @@ async def main():
     try:
         session = await client.create_session({
             "model": model,
-            "streaming": True,
+            "streaming": False,
             "on_permission_request": PermissionHandler.approve_all
         })
 
-        def on_event(event):
-            if event.type.value == "assistant.message_delta":
-                delta = event.data.delta_content or ""
-                print(delta, end="", flush=True)
-
-        session.on(on_event)
-
-        # Send the prompt to Copilot
-        await session.send_and_wait({"prompt": prompt})
+        # Send the prompt and wait for the full response
+        # Since we disabled streaming, we can just print the final result
+        response = await session.send_and_wait({"prompt": prompt})
+        
+        if response and response.data and response.data.content:
+             print(response.data.content)
+        else:
+             print("Error: Empty response from Copilot", file=sys.stderr)
 
     except Exception as e:
         print(f"❌ Error occurred: {e}", file=sys.stderr)

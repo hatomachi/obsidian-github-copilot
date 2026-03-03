@@ -1,28 +1,21 @@
-import { spawn, exec, ChildProcessWithoutNullStreams } from "child_process";
-import { promisify } from "util";
+import { ChildProcessWithoutNullStreams } from "child_process";
 import * as path from "path";
-
-const execPromise = promisify(exec);
+const { exec } = require('child_process');
 
 export class CopilotService {
     private vaultPath: string;
     private pythonPath: string;
     private wrapperPath: string;
 
-    constructor(vaultPath: string, pluginDir: string, pythonPath: string = "python") {
+    constructor(vaultPath: string, pluginDir: string, pythonPath: string = "python3") {
         this.vaultPath = vaultPath;
         this.pythonPath = pythonPath;
         this.wrapperPath = path.join(vaultPath, pluginDir, "copilot_wrapper.py");
     }
 
     /**
-     * Sends a prompt to the Copilot Python wrapper and streams the response back.
-     * @param sessionId The UUID representing the chat session to maintain context.
-     * @param prompt The question or instruction for Copilot.
-     * @param model The specific model to use (e.g., "gpt-4o").
-     * @param onData Callback for receiving chunks of text from stdout.
-     * @param onError Callback for receiving chunks of text from stderr.
-     * @param onEnd Callback when the process finishes.
+     * Sends a prompt to the Copilot Python wrapper.
+     * Uses `exec` to wait for the entire response to simplify cross-platform execution.
      */
     public askCopilot(
         sessionId: string,
@@ -31,57 +24,44 @@ export class CopilotService {
         onData: (chunk: string) => void,
         onError: (chunk: string) => void,
         onEnd: (code: number | null) => void
-    ): ChildProcessWithoutNullStreams {
-        const args = [this.wrapperPath];
-        const commandToSpawn = this.pythonPath || "python";
-
-        console.log(`[CopilotService] Spawning: ${commandToSpawn} ${args.join(" ")} in ${this.vaultPath}`);
-
-        const augmentedEnv = { ...process.env };
-        if (this.pythonPath && this.pythonPath !== "python" && this.pythonPath !== "python3") {
-            const pythonDir = path.dirname(this.pythonPath);
-            augmentedEnv.PATH = `${pythonDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
-        }
-
-        const child = spawn(commandToSpawn, args, {
-            cwd: this.vaultPath,
-            env: augmentedEnv,
-            shell: false
-        });
+    ) {
+        let commandToRun = this.pythonPath || "python3";
+        // If the path contains spaces and isn't quoted, quote it to prevent shell errors
+        const cmd = commandToRun.includes(" ") && !commandToRun.startsWith('"') ? `"${commandToRun}"` : commandToRun;
         
-        // Write the prompt to the wrapper's stdin as JSON
-        const inputData = JSON.stringify({
+        // Escape the JSON to pass it as a command line argument safely
+        const inputObj = {
             prompt: prompt,
             model: model,
             sessionId: sessionId
-        });
-        child.stdin.write(inputData);
-        child.stdin.end();
+        };
+        // Use base64 encoding to completely avoid shell escaping nightmares across Windows/Mac
+        const base64Input = Buffer.from(JSON.stringify(inputObj)).toString('base64');
+        
+        const fullCommand = `${cmd} "${this.wrapperPath}" "${base64Input}"`;
+        console.log(`[CopilotService] Executing in ${this.vaultPath}: ${fullCommand}`);
 
-        child.stdout.on("data", (data) => {
-            const text = data.toString();
-            console.log(`[CopilotService STDOUT]: ${text}`);
-            onData(text);
-        });
+        exec(fullCommand, { cwd: this.vaultPath, maxBuffer: 1024 * 1024 * 10 }, (error: any, stdout: string, stderr: string) => {
+            if (stderr) {
+                console.debug(`[CopilotService STDERR]: ${stderr}`);
+                // Only treat it as an actual error if exec itself failed, 
+                // because python might print warnings to stderr.
+            }
+            
+            if (error) {
+                console.error(`[CopilotService] Exec Error:`, error);
+                onError(`[Failed to execute Python Wrapper]: ${error.message}\nStderr: ${stderr}`);
+                onEnd(error.code !== undefined ? error.code : -1);
+                return;
+            }
 
-        child.stderr.on("data", (data) => {
-            const text = data.toString();
-            console.debug(`[CopilotService STDERR]: ${text}`);
-            onError(text);
+            console.log(`[CopilotService STDOUT length]: ${stdout.length}`);
+            onData(stdout);
+            onEnd(0);
         });
-
-        child.on("close", (code) => {
-            console.log(`[CopilotService] Process exited with code ${code}`);
-            onEnd(code);
-        });
-
-        child.on("error", (error) => {
-            console.error(`[CopilotService] Failed to start subprocess: ${error.message}`);
-            onError(`[Failed to start Python Wrapper]: ${error.message}\nPlease ensure Python is installed and the path is correct in settings.`);
-            onEnd(-1);
-        });
-
-        return child;
+        
+        // Return dummy object to match signature for now, since ChatView doesn't actually call methods on it
+        return {} as ChildProcessWithoutNullStreams;
     }
 
     /**

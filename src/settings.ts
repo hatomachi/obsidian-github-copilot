@@ -14,7 +14,7 @@ export interface MyPluginSettings {
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
-	pythonCommandPath: 'python',
+	pythonCommandPath: 'python3',
 	activeSessionId: '',
 	chatHistory: [],
 	copilotModel: 'claude-sonnet-4.6'
@@ -40,7 +40,7 @@ export class CopilotSettingTab extends PluginSettingTab {
 				.setPlaceholder('python3')
 				.setValue(this.plugin.settings.pythonCommandPath)
 				.onChange(async (value) => {
-					this.plugin.settings.pythonCommandPath = value || 'python';
+					this.plugin.settings.pythonCommandPath = value || 'python3';
 					await this.plugin.saveSettings();
 				}));
 	}
