@@ -6,22 +6,22 @@ const execPromise = promisify(exec);
 
 export class CopilotService {
     private vaultPath: string;
-    private cliCommand: string;
-    private nodePath: string;
+    private pythonPath: string;
+    private wrapperPath: string;
 
-    constructor(vaultPath: string, cliCommand: string = "copilot", nodePath: string = "node") {
+    constructor(vaultPath: string, pluginDir: string, pythonPath: string = "python") {
         this.vaultPath = vaultPath;
-        this.cliCommand = cliCommand; // "copilot" expects the GitHub Copilot CLI to be in the system PATH
-        this.nodePath = nodePath;
+        this.pythonPath = pythonPath;
+        this.wrapperPath = path.join(vaultPath, pluginDir, "copilot_wrapper.py");
     }
 
     /**
-     * Sends a prompt to the Copilot CLI and streams the response back.
+     * Sends a prompt to the Copilot Python wrapper and streams the response back.
      * @param sessionId The UUID representing the chat session to maintain context.
      * @param prompt The question or instruction for Copilot.
-     * @param model The specific model to use (e.g., "gpt-4").
+     * @param model The specific model to use (e.g., "gpt-4o").
      * @param onData Callback for receiving chunks of text from stdout.
-     * @param onError Callback for receiving chunks of text from stderr (often usage stats or real errors).
+     * @param onError Callback for receiving chunks of text from stderr.
      * @param onEnd Callback when the process finishes.
      */
     public askCopilot(
@@ -32,66 +32,52 @@ export class CopilotService {
         onError: (chunk: string) => void,
         onEnd: (code: number | null) => void
     ): ChildProcessWithoutNullStreams {
-        // Example invocation: node /path/to/copilot -p "your prompt here" --allow-all --resume <sessionId> --model <model>
-        // The `--allow - all` flag allows the CLI to execute actions like file creation without interactive prompting.
-        // `--resume <sessionId>` ensures the CLI context is maintained across multiple subprocess invocations.
-        // For github-copilot-cli, non-interactive mode requires `- p` or `--prompt`.
-        // Build the target command:
-        // node /usr/local/bin/copilot --allow-all --resume [sessionId] --model [model] -p "[prompt]"
-        const args = [
-            '--allow-all',
-            '--resume', sessionId
-        ];
-
-        // Directly invoke Node, passing the JS script path as the first argument.
-        // This bypasses .cmd, .ps1, and bash wrappers completely, resolving Windows shell association issues.
-        const commandToSpawn = this.nodePath || "node";
-        args.unshift(this.cliCommand);
-
-        if (model) {
-            args.push('--model', model);
-        }
-
-        args.push('-p', prompt);
+        const args = [this.wrapperPath];
+        const commandToSpawn = this.pythonPath || "python";
 
         console.log(`[CopilotService] Spawning: ${commandToSpawn} ${args.join(" ")} in ${this.vaultPath}`);
 
-        // Create an augmented environment that injects the Node.js directory into the PATH.
-        // This is crucial for macOS GUI apps (like Obsidian) that don't inherit terminal PATHs (like Homebrew).
-        // Since `copilot` binary is often a JS file starting with `#!/usr/bin/env node`, the OS must find `node` in PATH.
         const augmentedEnv = { ...process.env };
-        if (this.nodePath && this.nodePath !== "node") {
-            const nodeDir = path.dirname(this.nodePath);
-            augmentedEnv.PATH = `${nodeDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
+        if (this.pythonPath && this.pythonPath !== "python" && this.pythonPath !== "python3") {
+            const pythonDir = path.dirname(this.pythonPath);
+            augmentedEnv.PATH = `${pythonDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
         }
 
         const child = spawn(commandToSpawn, args, {
             cwd: this.vaultPath,
             env: augmentedEnv,
-            shell: false // No shell needed since we execute the Node binary directly
+            shell: false
         });
+        
+        // Write the prompt to the wrapper's stdin as JSON
+        const inputData = JSON.stringify({
+            prompt: prompt,
+            model: model,
+            sessionId: sessionId
+        });
+        child.stdin.write(inputData);
+        child.stdin.end();
 
         child.stdout.on("data", (data) => {
             const text = data.toString();
-            console.log(`[CopilotService STDOUT]: ${text} `);
+            console.log(`[CopilotService STDOUT]: ${text}`);
             onData(text);
         });
 
         child.stderr.on("data", (data) => {
             const text = data.toString();
-            // Copilot CLI outputs its usage statistics and non-fatal progress info to stderr.
-            console.debug(`[CopilotService STDERR]: ${text} `);
+            console.debug(`[CopilotService STDERR]: ${text}`);
             onError(text);
         });
 
         child.on("close", (code) => {
-            console.log(`[CopilotService] Process exited with code ${code} `);
+            console.log(`[CopilotService] Process exited with code ${code}`);
             onEnd(code);
         });
 
         child.on("error", (error) => {
-            console.error(`[CopilotService] Failed to start subprocess: ${error.message} `);
-            onError(`[Failed to start CLI]: ${error.message} \nPlease ensure Copilot CLI('${this.cliCommand}') is configured correctly in Settings.`);
+            console.error(`[CopilotService] Failed to start subprocess: ${error.message}`);
+            onError(`[Failed to start Python Wrapper]: ${error.message}\nPlease ensure Python is installed and the path is correct in settings.`);
             onEnd(-1);
         });
 
@@ -99,55 +85,12 @@ export class CopilotService {
     }
 
     /**
-     * Dynamically fetches the list of available models from the CLI's help output.
+     * Returns a hardcoded list of available models since fetching dynamically via SDK is not exposed yet.
      */
     async getAvailableModels(): Promise<string[]> {
-        return new Promise((resolve) => {
-            const augmentedEnv = { ...process.env };
-            if (this.nodePath && this.nodePath !== "node") {
-                const nodeDir = path.dirname(this.nodePath);
-                augmentedEnv.PATH = `${nodeDir}${path.delimiter}${augmentedEnv.PATH || ''}`;
-            }
-
-            // Execute `node /path/to/copilot.js ask --help`
-            const command = `"${this.nodePath || 'node'}" "${this.cliCommand}" ask --help`;
-
-            exec(
-                command,
-                {
-                    env: augmentedEnv // Provide full environment context for CLI execution
-                },
-                (error: any, stdout: string, stderr: string) => {
-                    if (error && !stdout && !stderr) {
-                        console.error("[CopilotService] Failed to fetch models from CLI help:", error);
-                        return resolve([]);
-                    }
-
-                    try {
-                        const text = stdout || stderr;
-                        // Look for the line containing `--model <model>` and extract choices
-                        // Example: --model <model>  ... (choices: "claude-sonnet-4.6", "gpt-5.2")
-                        const match = text.match(/--model[\s\S]*?choices:\s*([\s\S]*?)\)/i);
-                        if (match && match[1]) {
-                            // match[1] looks like: "claude-sonnet-4.6", "claude-sonnet-4.5", "gpt-4.1"
-                            const modelsStr = match[1];
-                            const models = modelsStr
-                                .split(',')
-                                .map(m => m.trim().replace(/"/g, ''))
-                                .filter(m => m.length > 0);
-
-                            // Enforce some structure and unique values just in case
-                            return resolve(Array.from(new Set(models)));
-                        } else {
-                            console.warn("[CopilotService] Regex failed to match model choices. CLI help output was:\n", text);
-                        }
-                    } catch (e) {
-                        console.error("[CopilotService] Error parsing models from CLI help:", e);
-                    }
-
-                    // Fallback if parsing fails or regex doesn't match
-                    resolve([]);
-                });
-        });
+        return Promise.resolve([
+            "gpt-4o", "gpt-4", "claude-3.5-sonnet", "claude-3.5-haiku",
+            "claude-sonnet-4.6", "claude-sonnet-4.5"
+        ]);
     }
 }

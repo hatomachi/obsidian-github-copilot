@@ -120,10 +120,10 @@ export class CopilotChatView extends ItemView {
 
         // Initialize Service
         const vaultPath = this.plugin.getVaultAbsolutePath();
+        const pluginDir = this.plugin.manifest.dir || "";
         if (vaultPath) {
-            const cliPath = this.plugin.settings.copilotCommandPath;
-            const nodePath = this.plugin.settings.nodeCommandPath;
-            this.copilotService = new CopilotService(vaultPath, cliPath, nodePath);
+            const pythonPath = this.plugin.settings.pythonCommandPath;
+            this.copilotService = new CopilotService(vaultPath, pluginDir, pythonPath);
         } else {
             this.appendMessage("System", "Error: Cannot determine Vault absolute path. Copilot CLI requires it.");
             this.submitBtnEl.disabled = true;

@@ -7,16 +7,14 @@ export interface ChatMessage {
 }
 
 export interface MyPluginSettings {
-	copilotCommandPath: string;
-	nodeCommandPath: string;
+	pythonCommandPath: string;
 	activeSessionId: string;
 	chatHistory: ChatMessage[];
 	copilotModel: string;
 }
 
 export const DEFAULT_SETTINGS: MyPluginSettings = {
-	copilotCommandPath: 'copilot',
-	nodeCommandPath: 'node',
+	pythonCommandPath: 'python',
 	activeSessionId: '',
 	chatHistory: [],
 	copilotModel: 'claude-sonnet-4.6'
@@ -36,24 +34,13 @@ export class CopilotSettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName('Copilot JS Script Path')
-			.setDesc('Absolute path to the GitHub Copilot CLI JavaScript file (e.g., /usr/local/bin/copilot or C:\\Users\\...\\npm\\node_modules\\@githubnext\\github-copilot-cli\\bin\\copilot.js). Do NOT point to .cmd or .ps1 wrappers.')
+			.setName('Python Path')
+			.setDesc('Absolute path to the Python executable or simply "python" or "python3" if it is in your PATH. Used to execute the copilot_wrapper.py script.')
 			.addText(text => text
-				.setPlaceholder('copilot')
-				.setValue(this.plugin.settings.copilotCommandPath)
+				.setPlaceholder('python3')
+				.setValue(this.plugin.settings.pythonCommandPath)
 				.onChange(async (value) => {
-					this.plugin.settings.copilotCommandPath = value || 'copilot';
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Node.js Path')
-			.setDesc('Absolute path to the Node.js executable (e.g., /usr/local/bin/node or /opt/homebrew/bin/node). Used to inject into the PATH on macOS.')
-			.addText(text => text
-				.setPlaceholder('node')
-				.setValue(this.plugin.settings.nodeCommandPath)
-				.onChange(async (value) => {
-					this.plugin.settings.nodeCommandPath = value || 'node';
+					this.plugin.settings.pythonCommandPath = value || 'python';
 					await this.plugin.saveSettings();
 				}));
 	}
