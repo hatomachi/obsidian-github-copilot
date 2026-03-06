@@ -33,7 +33,8 @@ export class CopilotService {
         const inputObj = {
             prompt: prompt,
             model: model,
-            sessionId: sessionId
+            sessionId: sessionId,
+            vaultPath: this.vaultPath
         };
         // Use base64 encoding to completely avoid shell escaping nightmares across Windows/Mac
         const base64Input = Buffer.from(JSON.stringify(inputObj)).toString('base64');

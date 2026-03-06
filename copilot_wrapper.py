@@ -20,6 +20,7 @@ async def main():
         
         prompt = data.get("prompt")
         model = data.get("model", "gpt-4o")
+        vault_path = data.get("vaultPath", "")
     except Exception as e:
         print(f"Error parsing input: {e}", file=sys.stderr)
         sys.exit(1)
@@ -32,11 +33,17 @@ async def main():
     await client.start()
 
     try:
-        session = await client.create_session({
+        session_args = {
             "model": model,
             "streaming": False,
             "on_permission_request": PermissionHandler.approve_all
-        })
+        }
+        
+        if vault_path:
+            # Tell the Copilot SDK where the project root (Vault) is
+            session_args["workspace_folder"] = vault_path
+            
+        session = await client.create_session(session_args)
 
         # Send the prompt and wait for the full response
         # Since we disabled streaming, we can just print the final result
