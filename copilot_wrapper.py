@@ -5,6 +5,9 @@ import base64
 from copilot import CopilotClient, PermissionHandler
 
 async def main():
+    # Force UTF-8 output, crucial for Windows where default console encoding is often cp932 (Shift-JIS)
+    sys.stdout.reconfigure(encoding='utf-8')
+
     if len(sys.argv) < 2:
         print("Error: No input provided as argument", file=sys.stderr)
         sys.exit(1)
